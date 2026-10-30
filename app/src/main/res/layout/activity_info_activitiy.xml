@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#121212"
+    android:gravity="center"
+    android:orientation="vertical">
+
+    <Button
+        android:id="@+id/btn_disconnect_return"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="연결 해제 및 메인으로 돌아가기"
+        android:backgroundTint="#888888"
+        android:textColor="#FFFFFF"/>
+</LinearLayout>
