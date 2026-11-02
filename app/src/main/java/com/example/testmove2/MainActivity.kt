@@ -27,6 +27,7 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.OutputOptions
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -46,8 +47,8 @@ class MainActivity : AppCompatActivity() {
     ) { isGranted : Boolean ->
         if(isGranted) {
             // 카메라 권한 허용을 눌렀을 때
-            startCamera()
             Toast.makeText(this, "권한이 허용되었습니다. 사진을 저장합니다.",Toast.LENGTH_SHORT).show()
+            startCamera()
         } else {
             // 카메라 권한 거부를 눌렀을 때
             Toast.makeText(this, "권한이 거부되었습니다.",Toast.LENGTH_SHORT).show()
@@ -60,8 +61,8 @@ class MainActivity : AppCompatActivity() {
 
             if(action == "disconnect") {
                 viewModel.DisconnectDevice()
-                stopCamera()
                 Toast.makeText(this, "전달받은 상태: ${viewModel.connectionStatus.value}", Toast.LENGTH_SHORT).show()
+                stopCamera()
             }
         }
     }
@@ -124,17 +125,6 @@ class MainActivity : AppCompatActivity() {
         // SAVE 버튼을 누르면 카메라 사진 촬영
         saveBtn.setOnClickListener {
             it.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
-            /*
-            // 카메라 권한이 허용되어 있는지 검사
-            val permissionStatus = ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)
-            if (permissionStatus == PackageManager.PERMISSION_GRANTED) {
-                // 이미 허용된 상태라면 팝업 없이 바로 캡처해서 갤러리에 저장
-                captureAndSaveToGallery(cameraArea)
-            } else {
-                // 아직 권한이 없다면 -> 시스템 권한 요청 팝업
-                requestPermissionLauncher.launch(android.Manifest.permission.CAMERA)
-            }
-             */
             takePhoto()
         }
 
@@ -170,6 +160,7 @@ class MainActivity : AppCompatActivity() {
 
     // 카메라 녹화 시작 함수
     private fun startCamera() {
+        // 변수 생성
         val viewFinder = findViewById<PreviewView>(R.id.viewFinder)
         val waitingGuide = findViewById<LinearLayout>(R.id.layout_waiting_guide)
 
@@ -177,8 +168,10 @@ class MainActivity : AppCompatActivity() {
         waitingGuide.visibility = View.GONE
         viewFinder.visibility = View.VISIBLE
 
+        // 카메라 제공자 준비
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
 
+        // 카메라 제공자 사용 가능 여부 확인
         cameraProviderFuture.addListener({
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
 
@@ -196,6 +189,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 // 기존에 켜진 카메라가 있다면 끔
                 cameraProvider.unbindAll()
+
                 // 현재 화면에 실시간 카메라와 사진기를 동시에 가동함
                 cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageCapture)
             } catch (exc: Exception) {
@@ -204,15 +198,16 @@ class MainActivity : AppCompatActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    // 갤러리에 사진 저장 험수
+    // 갤러리 사진 저장 함수
     private fun takePhoto() {
+        // 저장 버튼 눌렀을 때 카메라가 안켜지면 켜달라고 하기
         val imageCapture = imageCapture ?: run {
-            Toast.makeText(this, "먼저 [연결 시도]를 눌러 카메라를 켜주세요.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "[연결시도] 버튼을 먼저 눌러주세요.", Toast.LENGTH_SHORT).show()
             return
         }
 
         // 저장할 파일 정보(MediaStore) 세팅
-        val filename = "EndoSight_${System.currentTimeMillis()}.jpg"
+        val filename = "EndoSight_Live_${System.currentTimeMillis()}.jpg"
         val contentValues = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
             put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
@@ -234,11 +229,11 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.getMainExecutor(this),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onError(exception: ImageCaptureException) {
-                    Log.e("디버그 테스트", "사진 촬영 실패: ${exception.message}", exception)
+                    Log.e("디버그 테스트", "사진 촬영 실패", exception)
                 }
 
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    Toast.makeText(baseContext, "실시간 화면 캡처 및 갤러리 저장 완료", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(baseContext, "실시간 캡처 및 갤러리 저장 완료", Toast.LENGTH_SHORT).show()
                 }
             }
         )
@@ -246,10 +241,11 @@ class MainActivity : AppCompatActivity() {
 
     // 카메라 끄는 함수
     private fun stopCamera() {
+        // 카메라 화면과 기존 화면 변수 생성
         val viewFinder = findViewById<PreviewView>(R.id.viewFinder)
         val waitingGuide = findViewById<LinearLayout>(R.id.layout_waiting_guide)
 
-        // 실제 카메라 하드웨어 작동 멈추기
+        // 실제 카메라 하드웨어 작동 멈추기, 카메라 제공자 사용 가능 여부 확인, 사용가능 여부 확인, 카메라 비활성화
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
