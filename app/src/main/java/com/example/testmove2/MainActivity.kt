@@ -83,17 +83,38 @@ class MainActivity : AppCompatActivity() {
         val recordBtn = findViewById<LinearLayout>(R.id.record)
         val resetBtn = findViewById<LinearLayout>(R.id.reset)
         val cameraArea = findViewById<FrameLayout>(R.id.camera_preview_area)
+        val rvGallery = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rv_photo_gallery)
+
+        // 사진 진열장을 가로 3칸짜리 바둑판(GridLayout) 모양으로 세팅
+        rvGallery.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 3)
 
         viewModel.connectionStatus.observe(this) { newStatus ->
             tvStatus.text = newStatus
         }
 
+        // ACQ 탭을 누르면 사진 진열장을 다시 숨기고 원래 카메라 화면 보여주기
         acqBtn.setOnClickListener {
             it.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+            rvGallery.visibility = View.GONE
         }
+
+        // VIEW 탭을 누르면 사진 진열장을 열고 찍은 사진들 불러오기
         viewBtn.setOnClickListener {
             it.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+
+            rvGallery.visibility = View.VISIBLE
+
+            // 폴더에서 사진들을 찾아와 진열장 PhotoAdapter에게 넘겨줌
+            val photos = loadSavedPhotos()
+            rvGallery.adapter = PhotoAdapter(photos)
+
+            if(photos.isEmpty()) {
+                Toast.makeText(this, "아직 저장된 사진이 없습니다. 먼저 SAVE 버튼을 눌러 촬영하세요.", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "총 ${photos.size}장의 사진을 불러왔습니다.", Toast.LENGTH_SHORT).show()
+            }
         }
+
         infBtn.setOnClickListener {
             it.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
             val intent = Intent(this, InfoActivitiy::class.java)
@@ -156,6 +177,46 @@ class MainActivity : AppCompatActivity() {
                 cameraArea.setBackgroundColor(android.graphics.Color.parseColor("#000000"))
             }
         }
+    }
+
+    // 갤러리(MediaStore)에서 앱이 저장한 사진들만 최신순으로 찾아오는 함수
+    private fun loadSavedPhotos(): List<android.net.Uri> {
+        // 사진 리스트 저장할 변수 생성
+        val photoList = mutableListOf<android.net.Uri>()
+
+        // 가져올 정보 : 사진의 고유 번호(_ID)와 파일 이름(DISPLAY_NAME)
+        val projection = arrayOf(
+            MediaStore.Images.Media._ID,
+            MediaStore.Images.Media.DISPLAY_NAME
+        )
+
+        // 조건 : 파일 이름이 "EndoSight_"로 시작하는 우리가 찍은 사진만 골라내기
+        val selection = "${MediaStore.Images.Media.DISPLAY_NAME} LIKE ?"
+        val selectionArgs = arrayOf("EndoSight_%")
+
+        // 정렬 : 방금 찍은 최신 사진이 맨 앞에 오도록 정렬
+        val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+
+        // 안드로이드 보안 때문에 관리자(contentResolver)에게 요청 (query) 하는 것
+        contentResolver.query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            selection,
+            selectionArgs,
+            sortOrder
+        )?.use { cursor ->
+            val idColumns = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(idColumns)
+                // 사진의 고유 번호(id)를 가지고 실제 사진 주소(Uri)를 조합해서 리스트에 추가
+                val contentUri = android.content.ContentUris.withAppendedId(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    id
+                )
+                photoList.add(contentUri)
+            }
+        }
+        return photoList
     }
 
     // 카메라 녹화 시작 함수
