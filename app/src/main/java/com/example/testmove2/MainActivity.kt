@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.Vibrator
 import android.provider.MediaStore
 import android.util.Log
+import android.view.ScaleGestureDetector
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
@@ -33,12 +34,17 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.jar.Manifest
 import kotlin.text.insert
 
 class MainActivity : AppCompatActivity() {
     private lateinit var viewModel: DeviceViewModel
-
+    private var needRefreshGallery = true
+    private lateinit var viewFinder: androidx.camera.view.PreviewView
     // 실시간 사진 변수
     private var imageCapture: ImageCapture? = null
 
@@ -73,6 +79,7 @@ class MainActivity : AppCompatActivity() {
 
         viewModel = ViewModelProvider(this)[DeviceViewModel::class.java]
 
+        viewFinder = findViewById<PreviewView>(R.id.viewFinder)
         val tvStatus = findViewById<TextView>(R.id.tv_connection_status)
         val acqBtn = findViewById<TextView>(R.id.acq)
         val viewBtn = findViewById<TextView>(R.id.view)
@@ -84,6 +91,20 @@ class MainActivity : AppCompatActivity() {
         val resetBtn = findViewById<LinearLayout>(R.id.reset)
         val cameraArea = findViewById<FrameLayout>(R.id.camera_preview_area)
         val rvGallery = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rv_photo_gallery)
+        val ivFullScreen = findViewById<com.github.chrisbanes.photoview.PhotoView>(R.id.iv_fullscreen_photo)
+
+        val photoAdapter = PhotoAdapter(emptyList()) { clickedUri ->
+            ivFullScreen.visibility = View.VISIBLE
+            com.bumptech.glide.Glide.with(this@MainActivity)
+                .load(clickedUri)
+                .thumbnail(0.1f)
+                .into(ivFullScreen)
+        }
+        rvGallery.adapter = photoAdapter
+
+        ivFullScreen.setOnPhotoTapListener { _, _, _ ->
+            ivFullScreen.visibility = View.GONE
+        }
 
         // 사진 진열장을 가로 3칸짜리 바둑판(GridLayout) 모양으로 세팅
         rvGallery.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 3)
@@ -96,23 +117,36 @@ class MainActivity : AppCompatActivity() {
         acqBtn.setOnClickListener {
             it.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
             rvGallery.visibility = View.GONE
+            ivFullScreen.visibility = View.GONE
+
+            if(imageCapture != null) {
+                viewFinder.visibility = View.VISIBLE
+            }
         }
 
         // VIEW 탭을 누르면 사진 진열장을 열고 찍은 사진들 불러오기
         viewBtn.setOnClickListener {
             it.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
 
+            viewFinder.visibility = View.GONE
             rvGallery.visibility = View.VISIBLE
+            ivFullScreen.visibility = View.GONE
 
-            // 폴더에서 사진들을 찾아와 진열장 PhotoAdapter에게 넘겨줌
-            val photos = loadSavedPhotos()
-            rvGallery.adapter = PhotoAdapter(photos)
+            if(needRefreshGallery) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val photos = loadSavedPhotos()
 
-            if(photos.isEmpty()) {
-                Toast.makeText(this, "아직 저장된 사진이 없습니다. 먼저 SAVE 버튼을 눌러 촬영하세요.", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "총 ${photos.size}장의 사진을 불러왔습니다.", Toast.LENGTH_SHORT).show()
+                    withContext(Dispatchers.Main) {
+                        photoAdapter.updatePhotos(photos)
+                        needRefreshGallery = false
+                    }
+                }
             }
+        }
+
+        // 전체화면 시 클릭하면 사진갤러리로
+        ivFullScreen.setOnClickListener {
+            ivFullScreen.visibility = View.GONE
         }
 
         infBtn.setOnClickListener {
@@ -191,8 +225,18 @@ class MainActivity : AppCompatActivity() {
         )
 
         // 조건 : 파일 이름이 "EndoSight_"로 시작하는 우리가 찍은 사진만 골라내기
-        val selection = "${MediaStore.Images.Media.DISPLAY_NAME} LIKE ?"
-        val selectionArgs = arrayOf("EndoSight_%")
+        //val selection = "${MediaStore.Images.Media.DISPLAY_NAME} LIKE ?"
+        //val selectionArgs = arrayOf("EndoSight_%")
+        val selection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            "${MediaStore.Images.Media.RELATIVE_PATH} LIKE ?"
+        } else {
+            "${MediaStore.Images.Media.DISPLAY_NAME} LIKE ?"
+        }
+        val selectionArgs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            arrayOf("%Pictures/EndoSight%")
+        } else {
+            arrayOf("EndoSight_%")
+        }
 
         // 정렬 : 방금 찍은 최신 사진이 맨 앞에 오도록 정렬
         val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
@@ -222,7 +266,6 @@ class MainActivity : AppCompatActivity() {
     // 카메라 녹화 시작 함수
     private fun startCamera() {
         // 변수 생성
-        val viewFinder = findViewById<PreviewView>(R.id.viewFinder)
         val waitingGuide = findViewById<LinearLayout>(R.id.layout_waiting_guide)
 
         // 글자, 버튼 등은 숨기고 카메라 띄우기
@@ -294,6 +337,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    needRefreshGallery = true
                     Toast.makeText(baseContext, "실시간 캡처 및 갤러리 저장 완료", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -303,7 +347,6 @@ class MainActivity : AppCompatActivity() {
     // 카메라 끄는 함수
     private fun stopCamera() {
         // 카메라 화면과 기존 화면 변수 생성
-        val viewFinder = findViewById<PreviewView>(R.id.viewFinder)
         val waitingGuide = findViewById<LinearLayout>(R.id.layout_waiting_guide)
 
         // 실제 카메라 하드웨어 작동 멈추기, 카메라 제공자 사용 가능 여부 확인, 사용가능 여부 확인, 카메라 비활성화

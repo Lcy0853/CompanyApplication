@@ -8,7 +8,11 @@ import android.widget.ImageView
 import androidx.recyclerview.widget.RecyclerView
 
 // 사진 주소(URI) 리스트를 받아서 화면에 진열해 주는 지배인(Adapter)
-class PhotoAdapter(private val photoList: List<Uri>) : RecyclerView.Adapter<PhotoAdapter.PhotoViewHolder>() {
+// 클릭했을 때 실행할 행동 onPhotoClick
+class PhotoAdapter(
+    private var photoList: List<Uri>,
+    private val onPhotoClick: (Uri) -> Unit
+) : RecyclerView.Adapter<PhotoAdapter.PhotoViewHolder>() {
 
     // 미니 액자(item_photo.xml) 안에 있는 ImageVew를 붙잡아두는 홀더
     class PhotoViewHolder(view: View) : RecyclerView.ViewHolder(view) {
@@ -26,11 +30,22 @@ class PhotoAdapter(private val photoList: List<Uri>) : RecyclerView.Adapter<Phot
         val photoUri = photoList[position]
         holder.ivPhoto.setImageURI(photoUri) // 고화질의 사진을 작게만 만들어서 렉걸림
 
+        // 사진을 클릭하면 MainActivity에게 클릭된 사진 주소를 알려줌
+        holder.ivPhoto.setOnClickListener {
+            onPhotoClick(photoUri)
+        }
         // 구글 글라이드를 사용해서 렉 줄임
-        //com.bumptech.glide.Glide.with(holder.itemView.context)
-        //    .load(photoUri)
-        //    .centerCrop()
-        //    .into(holder.ivPhoto)
+        com.bumptech.glide.Glide.with(holder.itemView.context)
+            .load(photoUri)
+            .override(300, 300)
+            .centerCrop()
+            .into(holder.ivPhoto)
+    }
+
+    // 어댑터를 새로 안만들고 사진 목록만 계속 업데이트
+    fun updatePhotos(newList: List<Uri>) {
+        this.photoList = newList
+        notifyDataSetChanged()
     }
 
     // 전체 사진이 총 몇 장인지 알려주는 함수

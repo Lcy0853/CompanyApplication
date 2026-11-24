@@ -118,6 +118,16 @@
             android:background="#121212"
             android:padding="4dp"
             android:visibility="gone"/>
+        <!-- 사진 확대 -->
+        <com.github.chrisbanes.photoview.PhotoView
+            android:id="@+id/iv_fullscreen_photo"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#E6000000"
+            android:scaleType="fitCenter"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true"/>
     </FrameLayout>
     <LinearLayout
         android:layout_width="match_parent"
